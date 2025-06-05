@@ -1,45 +1,75 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Locator } from '@playwright/test';
 const fs = require('fs/promises');
 
-test('has title', async ({ page, context }) => {
+// Functions
+const timeout = async time => {
+    await new Promise(resolve => {
+    setTimeout(() => {
+      resolve("Ok");
+    }, time);
+  });
+}
+
+test('Promedio por periodo', async ({ page, context }) => {
   //Login
   await page.goto('https://landing.unapec.edu.do/banner/');
-
   const [newPage] = await Promise.all([
     context.waitForEvent('page'),
     page.getByText('Acceso para estudiantes y egresados').click()
   ]);
 
   const { email, password } = JSON.parse(await fs.readFile(`${__dirname}/../credentials.json`, 'utf8'));
-
   await newPage.fill('input[name="loginfmt"]', email); // Inserte su email
-
   await newPage.locator('input[type="submit"]').click();
-
   await newPage.fill('input[name="passwd"]', password); // Inserte su password
-
   await newPage.locator('input[type="submit"]').click();
-
   await newPage.locator('input[id="idBtn_Back"]').click();
-
   const [newPage2] = await Promise.all([
     context.waitForEvent('page'),
     newPage.getByText('Ver calificaciones').click()
   ]);
+  await newPage2.locator('div[xe-field="term"]').click();
+  await timeout(2000)
+  let peridos = [] as Object[];
+  let options = await newPage2.locator('#select2-results-1 li').all();
+  for(let i = 2; i < options.length; i++){
+    const periodoTitle = await options[i].textContent();
+    await options[i].click();
+    await newPage2.locator('div[xe-field="level"]').click();
+    await timeout(1000);
+    await newPage2.locator('#GR').click();
+    await timeout(1000);
+    let rows = await newPage2.locator('#table1 tbody tr').all();
+    let credits = 0;
+    let value = 0;
+    let materias = [] as Object[];
+    await timeout(1000);
+    for(let x = 0; x < rows.length; x++){
+      const tds = await rows[x].locator('td').all();
+      const creditsString = await tds[7].textContent();
+      const valueString = await tds[8].textContent();
+      const creditNumber = parseInt(creditsString!);
+      const valueNumber = parseInt(valueString!)
+      credits += creditNumber;
+      value += valueNumber;
+      materias.push({
+        materia: await tds[1].textContent(),
+        credito: creditNumber,
+        value: valueNumber
+      })
+    }
+    const promedio = parseFloat((value / credits).toFixed(2));
+    let periodo = {
+      periodo: periodoTitle,
+      materias,
+      promedio
+    };
+    peridos.push(periodo);
+    await newPage2.locator('div[xe-field="term"]').click();
+    await timeout(1000);
+  }
 
-  expect(newPage2.getByText("A00114138"));
+  await fs.writeFile('Calificaciones.json', JSON.stringify(peridos));
 
-  await newPage2.locator(".control-group").first().click();
-
-  await new Promise(() => {});
+  console.log(peridos)
 });
-
-// test('get started link', async ({ page }) => {
-//   await page.goto('https://playwright.dev/');
-
-//   // Click the get started link.
-//   await page.getByRole('link', { name: 'Get started' }).click();
-
-//   // Expects page to have a heading with the name of Installation.
-//   await expect(page.getByRole('heading', { name: 'Installation' })).toBeVisible();
-// });
